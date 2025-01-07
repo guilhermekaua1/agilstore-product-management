@@ -119,6 +119,41 @@ app.put("/produtos/:id", (req, res) => {
     });
   });
 
+// Endpoint: Excluir Produto
+app.delete("/produtos/:id", (req, res) => {
+    const { id } = req.params;
+
+    // Ler os produtos do arquivo JSON
+    fs.readFile("products.json", "utf8", (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+      }
+
+      let produtos = JSON.parse(data);
+
+      // Verificar se o produto existe
+      const index = produtos.findIndex((produto) => produto.id === parseInt(id));
+      if (index === -1) {
+        return res.status(404).json({ error: "Produto não encontrado." });
+      }
+
+      // Remover o produto da lista
+      const produtoExcluido = produtos.splice(index, 1);
+
+      // Salvar a lista atualizada no arquivo JSON
+      fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
+        if (err) {
+          return res.status(500).json({ error: "Erro ao salvar as alterações." });
+        }
+
+        res.json({
+          message: "Produto excluído com sucesso.",
+          produto: produtoExcluido[0],
+        });
+      });
+    });
+  });
+
 
 // Iniciar o servidor
 app.listen(PORT, () => {
