@@ -3,33 +3,45 @@ const fs = require("fs");
 const app = express();
 const PORT = 3000;
 
-// Middleware para interpretar JSON no body das requisições
 app.use(express.json());
 
-// Rota padrão
+function lerProdutos() {
+  return new Promise((resolve, reject) => {
+    fs.readFile("products.json", "utf8", (err, data) => {
+      if (err) {
+        reject("Erro ao acessar o banco de dados.");
+      } else {
+        resolve(JSON.parse(data));
+      }
+    });
+  });
+}
+
+function salvarProdutos(produtos) {
+  return new Promise((resolve, reject) => {
+    fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
+      if (err) {
+        reject("Erro ao salvar os dados.");
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
 app.get("/", (req, res) => {
   res.send("Bem-vindo à API AgilStore!");
 });
 
-// Endpoint: Adicionar Produto
-app.post("/produtos", (req, res) => {
+app.post("/produtos", async (req, res) => {
   const { nome, preco, categoria } = req.body;
 
-  // Validação simples
   if (!nome || !preco || !categoria) {
     return res.status(400).json({ error: "Todos os campos são obrigatórios!" });
   }
 
-  // Ler os produtos do arquivo JSON
-  fs.readFile("products.json", "utf8", (err, data) => {
-    if (err) {
-      return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
-    }
-
-    // Parse do arquivo JSON
-    const produtos = JSON.parse(data);
-
-    // Novo produto
+  try {
+    const produtos = await lerProdutos();
     const novoProduto = {
       id: produtos.length + 1,
       nome,
@@ -37,162 +49,118 @@ app.post("/produtos", (req, res) => {
       categoria,
     };
 
-    // Adicionar o novo produto à lista
     produtos.push(novoProduto);
+    await salvarProdutos(produtos);
 
-    // Salvar a lista atualizada no arquivo JSON
-    fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
-      if (err) {
-        return res.status(500).json({ error: "Erro ao salvar o produto." });
-      }
-
-      res.status(201).json(novoProduto);
-    });
-  });
+    res.status(201).json(novoProduto);
+  } catch (error) {
+    res.status(500).json({ error });
+  }
 });
 
-// Endpoint: Listar Produtos
-app.get("/produtos", (req, res) => {
-    // Ler os produtos do arquivo JSON
-    fs.readFile("products.json", "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+app.get("/produtos", async (req, res) => {
+  try {
+    let produtos = await lerProdutos();
+    const { categoria, ordenacao } = req.query;
+
+    if (categoria) {
+      produtos = produtos.filter((produto) => produto.categoria === categoria);
+    }
+
+    if (ordenacao) {
+      if (ordenacao === "nome") {
+        produtos.sort((a, b) => a.nome.localeCompare(b.nome));
+      } else if (ordenacao === "preco") {
+        produtos.sort((a, b) => a.preco - b.preco);
+      } else if (ordenacao === "quantidade") {
+        produtos.sort((a, b) => a.quantidade - b.quantidade);
       }
+    }
 
-      let produtos = JSON.parse(data);
+    res.json(produtos);
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+});
 
-      // Aplicar filtros (se fornecidos)
-      const { categoria, ordenacao } = req.query;
+app.put("/produtos/:id", async (req, res) => {
+  const { id } = req.params;
+  const { nome, preco, categoria, quantidade } = req.body;
 
-      if (categoria) {
-        produtos = produtos.filter((produto) => produto.categoria === categoria);
-      }
+  try {
+    const produtos = await lerProdutos();
+    const index = produtos.findIndex((produto) => produto.id === parseInt(id));
 
-      if (ordenacao) {
-        if (ordenacao === "nome") {
-          produtos.sort((a, b) => a.nome.localeCompare(b.nome));
-        } else if (ordenacao === "preco") {
-          produtos.sort((a, b) => a.preco - b.preco);
-        } else if (ordenacao === "quantidade") {
-          produtos.sort((a, b) => a.quantidade - b.quantidade);
-        }
-      }
+    if (index === -1) {
+      return res.status(404).json({ error: "Produto não encontrado." });
+    }
 
-      // Retornar os produtos filtrados e/ou ordenados
-      res.json(produtos);
+    if (nome) produtos[index].nome = nome;
+    if (preco) produtos[index].preco = preco;
+    if (categoria) produtos[index].categoria = categoria;
+    if (quantidade) produtos[index].quantidade = quantidade;
+
+    await salvarProdutos(produtos);
+
+    res.json(produtos[index]);
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+});
+
+app.delete("/produtos/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const produtos = await lerProdutos();
+    const index = produtos.findIndex((produto) => produto.id === parseInt(id));
+
+    if (index === -1) {
+      return res.status(404).json({ error: "Produto não encontrado." });
+    }
+
+    const produtoExcluido = produtos.splice(index, 1);
+    await salvarProdutos(produtos);
+
+    res.json({
+      message: "Produto excluído com sucesso.",
+      produto: produtoExcluido[0],
     });
-  });
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+});
 
-// Endpoint: Atualizar Produto
-app.put("/produtos/:id", (req, res) => {
-    const { id } = req.params;
-    const { nome, preco, categoria, quantidade } = req.body;
+app.get("/produtos/busca", async (req, res) => {
+  const { id, nome } = req.query;
 
-    // Ler os produtos do arquivo JSON
-    fs.readFile("products.json", "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
-      }
+  try {
+    const produtos = await lerProdutos();
 
-      let produtos = JSON.parse(data);
-
-      // Encontrar o produto pelo ID
-      const index = produtos.findIndex((produto) => produto.id === parseInt(id));
-      if (index === -1) {
+    if (id) {
+      const produto = produtos.find((produto) => produto.id === parseInt(id));
+      if (!produto) {
         return res.status(404).json({ error: "Produto não encontrado." });
       }
+      return res.json(produto);
+    }
 
-      // Atualizar os campos fornecidos
-      if (nome) produtos[index].nome = nome;
-      if (preco) produtos[index].preco = preco;
-      if (categoria) produtos[index].categoria = categoria;
-      if (quantidade) produtos[index].quantidade = quantidade;
-
-      // Salvar o arquivo atualizado
-      fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
-        if (err) {
-          return res.status(500).json({ error: "Erro ao salvar o produto." });
-        }
-
-        res.json(produtos[index]);
-      });
-    });
-  });
-
-// Endpoint: Excluir Produto
-app.delete("/produtos/:id", (req, res) => {
-    const { id } = req.params;
-
-    // Ler os produtos do arquivo JSON
-    fs.readFile("products.json", "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+    if (nome) {
+      const resultados = produtos.filter((produto) =>
+        produto.nome.toLowerCase().includes(nome.toLowerCase())
+      );
+      if (resultados.length === 0) {
+        return res.status(404).json({ error: "Nenhum produto encontrado." });
       }
+      return res.json(resultados);
+    }
 
-      let produtos = JSON.parse(data);
+    res.status(400).json({ error: "Por favor, forneça um ID ou Nome para busca." });
+  } catch (error) {
+    res.status(500).json({ error });
+  }
+});
 
-      // Verificar se o produto existe
-      const index = produtos.findIndex((produto) => produto.id === parseInt(id));
-      if (index === -1) {
-        return res.status(404).json({ error: "Produto não encontrado." });
-      }
-
-      // Remover o produto da lista
-      const produtoExcluido = produtos.splice(index, 1);
-
-      // Salvar a lista atualizada no arquivo JSON
-      fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
-        if (err) {
-          return res.status(500).json({ error: "Erro ao salvar as alterações." });
-        }
-
-        res.json({
-          message: "Produto excluído com sucesso.",
-          produto: produtoExcluido[0],
-        });
-      });
-    });
-  });
-
-// Endpoint: Buscar Produto
-app.get("/produtos/busca", (req, res) => {
-    const { id, nome } = req.query;
-
-    // Ler os produtos do arquivo JSON
-    fs.readFile("products.json", "utf8", (err, data) => {
-      if (err) {
-        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
-      }
-
-      const produtos = JSON.parse(data);
-
-      // Buscar pelo ID, se fornecido
-      if (id) {
-        const produto = produtos.find((produto) => produto.id === parseInt(id));
-        if (!produto) {
-          return res.status(404).json({ error: "Produto não encontrado." });
-        }
-        return res.json(produto);
-      }
-
-      // Buscar pelo nome, se fornecido
-      if (nome) {
-        const resultados = produtos.filter((produto) =>
-          produto.nome.toLowerCase().includes(nome.toLowerCase())
-        );
-        if (resultados.length === 0) {
-          return res.status(404).json({ error: "Nenhum produto encontrado." });
-        }
-        return res.json(resultados);
-      }
-
-      // Caso nenhum parâmetro seja fornecido
-      res.status(400).json({ error: "Por favor, forneça um ID ou Nome para busca." });
-    });
-  });
-
-
-// Iniciar o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
