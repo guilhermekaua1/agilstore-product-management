@@ -154,6 +154,43 @@ app.delete("/produtos/:id", (req, res) => {
     });
   });
 
+// Endpoint: Buscar Produto
+app.get("/produtos/busca", (req, res) => {
+    const { id, nome } = req.query;
+
+    // Ler os produtos do arquivo JSON
+    fs.readFile("products.json", "utf8", (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+      }
+
+      const produtos = JSON.parse(data);
+
+      // Buscar pelo ID, se fornecido
+      if (id) {
+        const produto = produtos.find((produto) => produto.id === parseInt(id));
+        if (!produto) {
+          return res.status(404).json({ error: "Produto não encontrado." });
+        }
+        return res.json(produto);
+      }
+
+      // Buscar pelo nome, se fornecido
+      if (nome) {
+        const resultados = produtos.filter((produto) =>
+          produto.nome.toLowerCase().includes(nome.toLowerCase())
+        );
+        if (resultados.length === 0) {
+          return res.status(404).json({ error: "Nenhum produto encontrado." });
+        }
+        return res.json(resultados);
+      }
+
+      // Caso nenhum parâmetro seja fornecido
+      res.status(400).json({ error: "Por favor, forneça um ID ou Nome para busca." });
+    });
+  });
+
 
 // Iniciar o servidor
 app.listen(PORT, () => {
