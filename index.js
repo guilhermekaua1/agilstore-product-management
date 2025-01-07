@@ -83,6 +83,42 @@ app.get("/produtos", (req, res) => {
     });
   });
 
+// Endpoint: Atualizar Produto
+app.put("/produtos/:id", (req, res) => {
+    const { id } = req.params;
+    const { nome, preco, categoria, quantidade } = req.body;
+
+    // Ler os produtos do arquivo JSON
+    fs.readFile("products.json", "utf8", (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+      }
+
+      let produtos = JSON.parse(data);
+
+      // Encontrar o produto pelo ID
+      const index = produtos.findIndex((produto) => produto.id === parseInt(id));
+      if (index === -1) {
+        return res.status(404).json({ error: "Produto não encontrado." });
+      }
+
+      // Atualizar os campos fornecidos
+      if (nome) produtos[index].nome = nome;
+      if (preco) produtos[index].preco = preco;
+      if (categoria) produtos[index].categoria = categoria;
+      if (quantidade) produtos[index].quantidade = quantidade;
+
+      // Salvar o arquivo atualizado
+      fs.writeFile("products.json", JSON.stringify(produtos, null, 2), (err) => {
+        if (err) {
+          return res.status(500).json({ error: "Erro ao salvar o produto." });
+        }
+
+        res.json(produtos[index]);
+      });
+    });
+  });
+
 
 // Iniciar o servidor
 app.listen(PORT, () => {
