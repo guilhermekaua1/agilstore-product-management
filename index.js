@@ -51,6 +51,39 @@ app.post("/produtos", (req, res) => {
   });
 });
 
+// Endpoint: Listar Produtos
+app.get("/produtos", (req, res) => {
+    // Ler os produtos do arquivo JSON
+    fs.readFile("products.json", "utf8", (err, data) => {
+      if (err) {
+        return res.status(500).json({ error: "Erro ao acessar o banco de dados." });
+      }
+
+      let produtos = JSON.parse(data);
+
+      // Aplicar filtros (se fornecidos)
+      const { categoria, ordenacao } = req.query;
+
+      if (categoria) {
+        produtos = produtos.filter((produto) => produto.categoria === categoria);
+      }
+
+      if (ordenacao) {
+        if (ordenacao === "nome") {
+          produtos.sort((a, b) => a.nome.localeCompare(b.nome));
+        } else if (ordenacao === "preco") {
+          produtos.sort((a, b) => a.preco - b.preco);
+        } else if (ordenacao === "quantidade") {
+          produtos.sort((a, b) => a.quantidade - b.quantidade);
+        }
+      }
+
+      // Retornar os produtos filtrados e/ou ordenados
+      res.json(produtos);
+    });
+  });
+
+
 // Iniciar o servidor
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
